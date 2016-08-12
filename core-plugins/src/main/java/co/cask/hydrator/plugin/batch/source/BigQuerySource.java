@@ -21,15 +21,17 @@ import co.cask.cdap.api.annotation.Macro;
 import co.cask.cdap.api.annotation.Name;
 import co.cask.cdap.api.data.batch.Input;
 import co.cask.cdap.api.data.format.StructuredRecord;
+import co.cask.cdap.api.data.schema.Schema;
+import co.cask.cdap.api.dataset.lib.KeyValue;
 import co.cask.cdap.api.plugin.Plugin;
 import co.cask.cdap.api.plugin.PluginConfig;
+import co.cask.cdap.etl.api.Emitter;
 import co.cask.cdap.etl.api.batch.BatchSourceContext;
 import co.cask.hydrator.common.Constants;
 import co.cask.hydrator.common.ReferenceBatchSource;
 import co.cask.hydrator.common.ReferencePluginConfig;
 import co.cask.hydrator.common.SourceInputFormatProvider;
 import com.google.cloud.hadoop.io.bigquery.BigQueryConfiguration;
-import com.google.cloud.hadoop.io.bigquery.BigQueryInputFormat;
 import com.google.cloud.hadoop.io.bigquery.GsonBigQueryInputFormat;
 import com.google.common.base.Strings;
 import com.google.gson.JsonObject;
@@ -37,9 +39,9 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.util.parsing.json.JSONFormat;
 
 import java.io.IOException;
 
@@ -63,6 +65,7 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
     String jobname = "BigQueryJob";
     JobConf conf = new JobConf();
     conf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
+    conf.set(BigQueryConfiguration.INPUT_QUERY_KEY, sourceConfig.importQuery);
     // Make sure the required export-bucket setting is present.
     if (Strings.isNullOrEmpty(conf.get(BigQueryConfiguration.GCS_BUCKET_KEY))) {
       LOG.warn("Missing config for '{}'; trying to default to fs.gs.system.bucket.",
@@ -90,6 +93,33 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
 //    GsonBigQueryInputFormat;
   }
 
+  @Override
+  public void transform(KeyValue<LongWritable, JsonObject> input, Emitter<StructuredRecord> emitter) {
+    emitter.emit(jsonTransform(input.getValue()));
+  }
+
+  private StructuredRecord jsonTransform(JsonObject json) {
+    Schema innerSchema = Schema.recordOf(
+      "inner",
+      Schema.Field.of("innerInt", Schema.of(Schema.Type.INT)),
+      Schema.Field.of("innerString", Schema.of(Schema.Type.STRING)));
+    Schema schema = Schema.recordOf(
+      "event",
+      Schema.Field.of("intField", Schema.of(Schema.Type.INT)),
+      Schema.Field.of("recordField", innerSchema));
+
+    StructuredRecord record = StructuredRecord.builder(schema)
+      .set("intField", 5)
+      .set("recordField",
+           StructuredRecord.builder(innerSchema)
+             .set("innerInt", 7)
+             .set("innerString", "hello world")
+             .build()
+      )
+      .build();
+
+    return record;
+  }
   public static class BQSourceConfig extends PluginConfig {
     public static final String IMPORT_QUERY = "importQuery";
     public static final String PROJECT_ID   = "projectId";
