@@ -35,6 +35,7 @@ import com.google.cloud.hadoop.io.bigquery.BigQueryConfiguration;
 import com.google.cloud.hadoop.io.bigquery.GsonBigQueryInputFormat;
 import com.google.common.base.Strings;
 import com.google.gson.JsonObject;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
@@ -63,7 +64,8 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
   @Override
   public void prepareRun(BatchSourceContext context) throws IOException {
     String jobname = "BigQueryJob";
-    JobConf conf = new JobConf();
+    Job job = Job.getInstance();
+    Configuration conf = job.getConfiguration();
     conf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
     conf.set(BigQueryConfiguration.INPUT_QUERY_KEY, sourceConfig.importQuery);
     // Make sure the required export-bucket setting is present.
@@ -83,7 +85,6 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
                conf.get(BigQueryConfiguration.GCS_BUCKET_KEY), BigQueryConfiguration.GCS_BUCKET_KEY);
     }
     BigQueryConfiguration.configureBigQueryInput(conf, sourceConfig.fullyQualifiedInputTableId);
-    Job job = new Job(conf, jobname);
     job.setJarByClass(BigQuerySource.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(LongWritable.class);
@@ -95,10 +96,11 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
 
   @Override
   public void transform(KeyValue<LongWritable, JsonObject> input, Emitter<StructuredRecord> emitter) {
+    LOG.debug("input is {}", input.getValue());
     emitter.emit(jsonTransform(input.getValue()));
   }
 
-  private StructuredRecord jsonTransform(JsonObject json) {
+  private StructuredRecord jsonTransform(JsonObject jsonObject) {
     Schema innerSchema = Schema.recordOf(
       "inner",
       Schema.Field.of("innerInt", Schema.of(Schema.Type.INT)),
