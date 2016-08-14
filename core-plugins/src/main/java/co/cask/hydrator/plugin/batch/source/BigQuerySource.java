@@ -23,7 +23,6 @@ import co.cask.cdap.api.data.batch.Input;
 import co.cask.cdap.api.data.format.StructuredRecord;
 import co.cask.cdap.api.data.schema.Schema;
 import co.cask.cdap.api.dataset.lib.KeyValue;
-import co.cask.cdap.api.plugin.Plugin;
 import co.cask.cdap.api.plugin.PluginConfig;
 import co.cask.cdap.etl.api.Emitter;
 import co.cask.cdap.etl.api.PipelineConfigurer;
@@ -38,22 +37,17 @@ import com.google.cloud.hadoop.io.bigquery.GsonBigQueryInputFormat;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonObject;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.util.parsing.json.JSONFormat;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
 /**
  * Batch source to read from a BigQuery table
@@ -132,7 +126,6 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
     job.setInputFormatClass(GsonBigQueryInputFormat.class);
     context.setInput(Input.of(sourceConfig.referenceName,
                               new SourceInputFormatProvider(GsonBigQueryInputFormat.class, conf)));
-//    GsonBigQueryInputFormat;
   }
 
   @Override
@@ -189,7 +182,6 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
     if (outputSchema == null) {
       List<Schema.Field> outputFields = Lists.newArrayList();
       try {
-        // If processing of all the columns are required
           for (String fieldName : outputSchemaMapping.keySet()) {
             String columnName = fieldName;
             Schema fieldType = Schema.of(Schema.Type.valueOf(outputSchemaMapping.get(fieldName).toUpperCase()));
