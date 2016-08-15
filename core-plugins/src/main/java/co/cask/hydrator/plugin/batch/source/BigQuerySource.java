@@ -32,19 +32,31 @@ import co.cask.hydrator.common.Constants;
 import co.cask.hydrator.common.ReferenceBatchSource;
 import co.cask.hydrator.common.ReferencePluginConfig;
 import co.cask.hydrator.common.SourceInputFormatProvider;
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
+import com.google.api.client.http.HttpTransport;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.services.bigquery.Bigquery;
 import com.google.cloud.hadoop.io.bigquery.BigQueryConfiguration;
 import com.google.cloud.hadoop.io.bigquery.GsonBigQueryInputFormat;
+import com.google.cloud.hadoop.util.HadoopCredentialConfiguration;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonObject;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapreduce.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,12 +92,10 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
   }
 
   private void init() {
-    if (!Strings.isNullOrEmpty(sourceConfig.outputSchema)) {
       String[] schemaList = sourceConfig.outputSchema.split(",");
       for (String schema : schemaList) {
         String[] columns = schema.split(":");
         outputSchemaMapping.put(columns[0], columns[1]);
-      }
     }
   }
 
@@ -100,32 +110,39 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
   @Override
   public void prepareRun(BatchSourceContext context) throws IOException {
     Job job = Job.getInstance();
+//    int id = 123;
+//    JobID jobID = new JobID("name", id);
+//    job.setJobID(jobID);
+//    LOG.debug("TEST JOB ID IS {}", job.getJobID().getId());
     Configuration conf = job.getConfiguration();
-    conf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
-    conf.set(BigQueryConfiguration.INPUT_QUERY_KEY, sourceConfig.importQuery);
+    JobConf jobConf = new JobConf(conf, BigQuerySource.class);
+    jobConf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
+    jobConf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
+    jobConf.set(BigQueryConfiguration.INPUT_QUERY_KEY, sourceConfig.importQuery);
     // Make sure the required export-bucket setting is present.
-    if (Strings.isNullOrEmpty(conf.get(BigQueryConfiguration.GCS_BUCKET_KEY))) {
-      LOG.warn("Missing config for '{}'; trying to default to fs.gs.system.bucket.",
-               BigQueryConfiguration.GCS_BUCKET_KEY);
-      String systemBucket = conf.get("fs.gs.system.bucket");
-      if (Strings.isNullOrEmpty(systemBucket)) {
-        LOG.error("Also missing fs.gs.system.bucket; value must be specified.");
-        System.exit(1);
-      } else {
-        LOG.info("Setting '{}' to '{}'", BigQueryConfiguration.GCS_BUCKET_KEY, systemBucket);
-        conf.set(BigQueryConfiguration.GCS_BUCKET_KEY, systemBucket);
-      }
-    } else {
-      LOG.info("Using export bucket '{}' as specified in '{}'",
-               conf.get(BigQueryConfiguration.GCS_BUCKET_KEY), BigQueryConfiguration.GCS_BUCKET_KEY);
-    }
-    BigQueryConfiguration.configureBigQueryInput(conf, sourceConfig.fullyQualifiedInputTableId);
+    BigQueryConfiguration.configureBigQueryInput(jobConf, sourceConfig.fullyQualifiedInputTableId);
     job.setJarByClass(BigQuerySource.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(LongWritable.class);
     job.setInputFormatClass(GsonBigQueryInputFormat.class);
+    LOG.debug("TEST JOB ID IS {}", job.getJobID());
     context.setInput(Input.of(sourceConfig.referenceName,
                               new SourceInputFormatProvider(GsonBigQueryInputFormat.class, conf)));
+    HttpTransport transport = new NetHttpTransport();
+    JsonFactory jsonFactory = new JacksonFactory();
+    HadoopCredentialConfiguration.newBuilder().withConfiguration(conf);
+    File file = new File("/Users/Yue/environment/Unknown-2");
+    InputStream inputStream = new FileInputStream(file);
+    GoogleCredential credential = GoogleCredential.fromStream(inputStream, transport, jsonFactory);
+
+//    BigQueryConfiguration.
+
+//    return HadoopCredentialConfiguration
+//      .newBuilder()
+//      .withConfiguration(config)
+//      .withOverridePrefix(BIGQUERY_CONFIG_PREFIX)
+//      .build()
+//      .getCredential(BIGQUERY_OAUTH_SCOPES);
   }
 
   @Override

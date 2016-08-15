@@ -231,6 +231,7 @@
               co.cask.hydrator.plugin.realtime.*;
               co.cask.hydrator.plugin.transform.*;
               co.cask.hydrator.plugin.validator.*;
+              com.google.cloud.hadoop.io.bigquery.*;
               org.apache.avro.mapreduce;
               parquet.avro.*;
             </_exportcontents>
