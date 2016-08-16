@@ -38,8 +38,10 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.bigquery.Bigquery;
+import com.google.api.services.bigquery.BigqueryScopes;
 import com.google.cloud.hadoop.io.bigquery.BigQueryConfiguration;
 import com.google.cloud.hadoop.io.bigquery.GsonBigQueryInputFormat;
+import com.google.cloud.hadoop.util.CredentialFactory;
 import com.google.cloud.hadoop.util.HadoopCredentialConfiguration;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -57,6 +59,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,41 +112,26 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
   }
 
   @Override
-  public void prepareRun(BatchSourceContext context) throws IOException {
+  public void prepareRun(BatchSourceContext context) throws IOException, GeneralSecurityException {
     Job job = Job.getInstance();
-//    int id = 123;
-//    JobID jobID = new JobID("name", id);
-//    job.setJobID(jobID);
-//    LOG.debug("TEST JOB ID IS {}", job.getJobID().getId());
     Configuration conf = job.getConfiguration();
     JobConf jobConf = new JobConf(conf, BigQuerySource.class);
+    jobConf.set("google.cloud.auth.service.account.json.keyfile", "/Users/Yue/environment/Unknown-4");
+    jobConf.set("mapred.bq.auth.service.account.json.keyfile", "/Users/Yue/environment/Unknown-4");
     jobConf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
     jobConf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
     jobConf.set(BigQueryConfiguration.INPUT_QUERY_KEY, sourceConfig.importQuery);
+    jobConf.set(BigQueryConfiguration.GCS_BUCKET_KEY, "vernal-surge-138121.appspot.com");
     // Make sure the required export-bucket setting is present.
     BigQueryConfiguration.configureBigQueryInput(jobConf, sourceConfig.fullyQualifiedInputTableId);
     job.setJarByClass(BigQuerySource.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(LongWritable.class);
     job.setInputFormatClass(GsonBigQueryInputFormat.class);
-    LOG.debug("TEST JOB ID IS {}", job.getJobID());
+    LOG.debug("TEST JOB CONFIG GOOGLECLOUD KEY IS {}", job.getConfiguration().
+                                          get("google.cloud.auth.service.account.json.keyfile"));
     context.setInput(Input.of(sourceConfig.referenceName,
-                              new SourceInputFormatProvider(GsonBigQueryInputFormat.class, conf)));
-    HttpTransport transport = new NetHttpTransport();
-    JsonFactory jsonFactory = new JacksonFactory();
-    HadoopCredentialConfiguration.newBuilder().withConfiguration(conf);
-    File file = new File("/Users/Yue/environment/Unknown-2");
-    InputStream inputStream = new FileInputStream(file);
-    GoogleCredential credential = GoogleCredential.fromStream(inputStream, transport, jsonFactory);
-
-//    BigQueryConfiguration.
-
-//    return HadoopCredentialConfiguration
-//      .newBuilder()
-//      .withConfiguration(config)
-//      .withOverridePrefix(BIGQUERY_CONFIG_PREFIX)
-//      .build()
-//      .getCredential(BIGQUERY_OAUTH_SCOPES);
+                              new SourceInputFormatProvider(GsonBigQueryInputFormat.class, jobConf)));
   }
 
   @Override

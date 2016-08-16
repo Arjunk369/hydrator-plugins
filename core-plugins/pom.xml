@@ -32,10 +32,10 @@
   <dependencies>
     <!-- https://mvnrepository.com/artifact/ch.ethz.ganymed/ganymed-ssh2 -->
     <dependency>
-      <groupId>com.google.cloud.bigdataoss</groupId>
-      <artifactId>bigquery-connector</artifactId>
-      <version>0.7.3-hadoop2</version>
-    </dependency>
+    <groupId>com.google.cloud.bigdataoss</groupId>
+    <artifactId>bigquery-connector</artifactId>
+    <version>0.7.7-hadoop2</version>
+  </dependency>
     <dependency>
       <groupId>ch.ethz.ganymed</groupId>
       <artifactId>ganymed-ssh2</artifactId>
@@ -233,6 +233,7 @@
               co.cask.hydrator.plugin.validator.*;
               com.google.cloud.hadoop.io.bigquery.*;
               org.apache.avro.mapreduce;
+              com.google.cloud.hadoop.io.bigquery.*;
               parquet.avro.*;
             </_exportcontents>
             <Embed-Dependency>*;inline=false;scope=compile</Embed-Dependency>
