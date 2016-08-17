@@ -32,35 +32,21 @@ import co.cask.hydrator.common.Constants;
 import co.cask.hydrator.common.ReferenceBatchSource;
 import co.cask.hydrator.common.ReferencePluginConfig;
 import co.cask.hydrator.common.SourceInputFormatProvider;
-import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
-import com.google.api.client.http.HttpTransport;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson2.JacksonFactory;
-import com.google.api.services.bigquery.Bigquery;
-import com.google.api.services.bigquery.BigqueryScopes;
 import com.google.cloud.hadoop.io.bigquery.BigQueryConfiguration;
 import com.google.cloud.hadoop.io.bigquery.GsonBigQueryInputFormat;
-import com.google.cloud.hadoop.util.CredentialFactory;
-import com.google.cloud.hadoop.util.HadoopCredentialConfiguration;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonObject;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapreduce.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileInputStream;
+
 import java.io.IOException;
-import java.io.InputStream;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,12 +61,13 @@ import java.util.Map;
 public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObject, StructuredRecord> {
   private static final Logger LOG = LoggerFactory.getLogger(BigQuerySource.class);
   private final BQSourceConfig sourceConfig;
+  private static String MRBQ_JSON_KEY;
+  private static String FSGS_JSON_KEY;
   private static final Schema DEFAULT_SCHEMA = Schema.recordOf(
     "event",
     Schema.Field.of("title", Schema.of(Schema.Type.STRING)),
     Schema.Field.of("unique_words", Schema.of(Schema.Type.INT))
   );
-
   private Map<String, String> outputSchemaMapping = new HashMap<>();
   private Schema outputSchema;
 
@@ -116,23 +103,21 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
     Job job = Job.getInstance();
     Configuration conf = job.getConfiguration();
     JobConf jobConf = new JobConf(conf, BigQuerySource.class);
-    jobConf.set("google.cloud.auth.service.account.json.keyfile", "/Users/Yue/environment/Unknown-4");
-    jobConf.set("mapred.bq.auth.service.account.json.keyfile", "/Users/Yue/environment/Unknown-4");
-    jobConf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
+    jobConf.set(MRBQ_JSON_KEY, sourceConfig.jsonFilePath);
+    jobConf.set(FSGS_JSON_KEY, sourceConfig.jsonFilePath);
     jobConf.set(BigQueryConfiguration.PROJECT_ID_KEY, sourceConfig.projectId);
     jobConf.set(BigQueryConfiguration.INPUT_QUERY_KEY, sourceConfig.importQuery);
-    jobConf.set(BigQueryConfiguration.GCS_BUCKET_KEY, "vernal-surge-138121.appspot.com");
+    jobConf.set(BigQueryConfiguration.GCS_BUCKET_KEY, sourceConfig.bucketKey);
     // Make sure the required export-bucket setting is present.
     BigQueryConfiguration.configureBigQueryInput(jobConf, sourceConfig.fullyQualifiedInputTableId);
     job.setJarByClass(BigQuerySource.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(LongWritable.class);
     job.setInputFormatClass(GsonBigQueryInputFormat.class);
-    LOG.debug("TEST JOB CONFIG GOOGLECLOUD KEY IS {}", job.getConfiguration().
-                                          get("google.cloud.auth.service.account.json.keyfile"));
     context.setInput(Input.of(sourceConfig.referenceName,
                               new SourceInputFormatProvider(GsonBigQueryInputFormat.class, jobConf)));
   }
+
 
   @Override
   public void transform(KeyValue<LongWritable, JsonObject> input, Emitter<StructuredRecord> emitter) {
@@ -156,6 +141,8 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
     public static final String IMPORT_QUERY = "importQuery";
     public static final String PROJECT_ID   = "projectId";
     public static final String INPUT_TABLE_ID = "input_tableId";
+    public static final String JSON_FILE_PATH = "json_file_path";
+    public static final String BUCKET_KEY = "bucket_key";
     @Name(Constants.Reference.REFERENCE_NAME)
     @Description(Constants.Reference.REFERENCE_NAME_DESCRIPTION)
     public String referenceName;
@@ -182,6 +169,16 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
                  " Example: publicdata:samples.shakespeare")
     @Macro
     String fullyQualifiedInputTableId;
+
+    @Name(JSON_FILE_PATH)
+    @Description("the credential json file path")
+    @Macro
+    String jsonFilePath;
+
+    @Name(BUCKET_KEY)
+    @Description("the bucket connector uses")
+    @Macro
+    String bucketKey;
   }
 
   private void getOutputSchema() {
