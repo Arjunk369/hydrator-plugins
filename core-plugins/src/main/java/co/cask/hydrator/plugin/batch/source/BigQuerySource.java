@@ -62,7 +62,7 @@ public class BigQuerySource extends ReferenceBatchSource<LongWritable, JsonObjec
   private static final Logger LOG = LoggerFactory.getLogger(BigQuerySource.class);
   private final BQSourceConfig sourceConfig;
   private final String MRBQ_JSON_KEY = "mapred.bq.auth.service.account.json.keyfile";
-  private static String FSGS_JSON_KEY = "google.cloud.auth.service.account.json.keyfile";
+  private static String FSGS_JSON_KEY = "fs.gs.auth.service.account.json.keyfile";
   private static final Schema DEFAULT_SCHEMA = Schema.recordOf(
     "event",
     Schema.Field.of("title", Schema.of(Schema.Type.STRING)),
