@@ -156,6 +156,16 @@ public final class Properties {
   }
 
   /**
+   * Configuration for KinesisSink
+   */
+  public static class KinesisRealtimeSink {
+    public static final String BODY_FIELD = "body.field";
+    public static final String ACCESS_ID = "accessID";
+    public static final String ACCESS_KEY = "accessKey";
+    public static final String PARTITION_KEY = "partitionKey";
+  }
+
+  /**
    * Common properties for BatchWritable source and sinks
    */
   public static class BatchReadableWritable {
