@@ -23,18 +23,19 @@ import co.cask.cdap.api.common.Bytes;
 import co.cask.cdap.api.data.format.StructuredRecord;
 import co.cask.cdap.api.data.schema.Schema;
 import co.cask.cdap.api.plugin.PluginConfig;
+import co.cask.cdap.etl.api.PipelineConfigurer;
 import co.cask.cdap.etl.api.realtime.DataWriter;
-import co.cask.cdap.etl.api.realtime.RealtimeContext;
 import co.cask.cdap.etl.api.realtime.RealtimeSink;
 import co.cask.hydrator.plugin.common.Properties;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.kinesis.AmazonKinesisClient;
 import com.amazonaws.services.kinesis.model.PutRecordRequest;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
-import javax.annotation.Nullable;
 
 import static co.cask.hydrator.plugin.common.KinesisUtil.createAndWaitForStreamToBecomeAvailable;
 
@@ -47,13 +48,6 @@ import static co.cask.hydrator.plugin.common.KinesisUtil.createAndWaitForStreamT
 @Description("Real-time sink that outputs to a specified AWS Kinesis stream.")
 public class RealtimeKinesisStreamSink extends RealtimeSink<StructuredRecord> {
 
-  private static final String NAME_DESC = "The name of the Kinesis stream to output to." +
-    " Must be a valid Kinesis stream name. The Kinesis stream will be created if it does not exist.";
-
-  private static final String BODY_FIELD_DESC = "Name of the field in the record that contains the data to be " +
-    "written to the specified stream. The data could be in binary format as a byte array or a ByteBuffer. " +
-    "It can also be a String. If unspecified, the 'body' key is used.";
-
   private static final Logger LOG = LoggerFactory.getLogger(RealtimeSink.class);
   private final KinesisConfig config;
   private static AmazonKinesisClient kinesisClient;
@@ -62,19 +56,29 @@ public class RealtimeKinesisStreamSink extends RealtimeSink<StructuredRecord> {
     this.config = config;
   }
 
+
   @Override
-  public void initialize(RealtimeContext context) throws Exception {
-    super.initialize(context);
+  public void configurePipeline(PipelineConfigurer pipelineConfigurer) {
+    Preconditions.checkArgument(!Strings.isNullOrEmpty(config.name),
+                                "Stream name should be non-null, non-empty.");
+    Preconditions.checkArgument(!Strings.isNullOrEmpty(config.awsAccessKey),
+                                "Access Key required");
+    Preconditions.checkArgument(!Strings.isNullOrEmpty(config.awsAccessSecret),
+                                "Access Key secret required");
+    Preconditions.checkArgument(!Strings.isNullOrEmpty(config.partition),
+                                "partition name should be non-null, non-empty.");
+    Preconditions.checkArgument(!Strings.isNullOrEmpty(config.bodyField),
+                                "Please map the input field containing data");
     BasicAWSCredentials awsCred = new BasicAWSCredentials(config.awsAccessKey, config.awsAccessSecret);
     kinesisClient = new AmazonKinesisClient(awsCred);
     createAndWaitForStreamToBecomeAvailable(kinesisClient,
                                             config.name,
-                                            Integer.valueOf(config.partition));
+                                            config.shardCount);
   }
 
   @Override
   public int write(Iterable<StructuredRecord> structuredRecords, DataWriter dataWriter) throws Exception {
-    //int numRecordsWritten = 0;
+    int numRecordsWritten = 0;
     for (StructuredRecord structuredRecord : structuredRecords) {
       Schema schema = structuredRecord.getSchema();
       Object data = structuredRecord.get(config.bodyField);
@@ -82,61 +86,92 @@ public class RealtimeKinesisStreamSink extends RealtimeSink<StructuredRecord> {
         LOG.debug("Found null data. Skipping record.");
         continue;
       }
-
-      // Schema.Field dataSchemaField = schema.getField(config.bodyField);
-
+      Schema.Field dataSchemaField = schema.getField(config.bodyField);
       PutRecordRequest putRecordRequest = new PutRecordRequest();
       putRecordRequest.setStreamName(config.name);
-      putRecordRequest.setData(ByteBuffer.wrap(Bytes.toBytes((String) data)));
       putRecordRequest.setPartitionKey(config.partition);
-      kinesisClient.putRecord(putRecordRequest);
 
-
-/*      switch (dataSchemaField.getSchema().getType()) {
+      switch (dataSchemaField.getSchema().getType()) {
         case BYTES:
-          numRecordsWritten += writeBytes(data);
+          numRecordsWritten += writeBytes(putRecordRequest, data);
           break;
         case STRING:
-          numRecordsWritten += writeString(dataWriter, data, headers);
+          numRecordsWritten += writeString(putRecordRequest, data);
           break;
         default:
           LOG.debug("Type {} is not supported for writing to stream", data.getClass().getName());
           break;
-      }*/
+      }
 
     }
-    return 0;
+    return numRecordsWritten;
   }
 
-  private static class KinesisConfig extends PluginConfig {
+  private int writeString(PutRecordRequest putRecordRequest, Object data) {
+    putRecordRequest.setData(ByteBuffer.wrap(Bytes.toBytes((String) data)));
+    kinesisClient.putRecord(putRecordRequest);
+    return 1;
+  }
 
-    @Description(NAME_DESC)
+  private int writeBytes(PutRecordRequest putRecordRequest, Object data) {
+    ByteBuffer buffer;
+    if (data instanceof ByteBuffer) {
+      buffer = (ByteBuffer) data;
+    } else if (data instanceof byte []) {
+      buffer = ByteBuffer.wrap((byte []) data);
+    } else {
+      LOG.debug("Type {} is not supported for writing to stream", data.getClass().getName());
+      return 0;
+    }
+    putRecordRequest.setData(buffer);
+    kinesisClient.putRecord(putRecordRequest);
+    return 1;
+  }
+
+  public KinesisConfig getConfig() {
+    return config;
+  }
+
+  /**
+   * config file for Kinesis stream sink
+   */
+  public static class KinesisConfig extends PluginConfig {
+
+    @Description("The name of the Kinesis stream to output to. Must be a valid Kinesis stream name." +
+      " The Kinesis stream will be created if it does not exist.")
     private String name;
 
     @Name(Properties.KinesisRealtimeSink.BODY_FIELD)
-    @Description(BODY_FIELD_DESC)
-    @Nullable
+    @Description("Name of the field in the record that contains the data to be " +
+      "written to the specified stream. The data could be in binary format as a byte array or a ByteBuffer. " +
+      "It can also be a String. If unspecified, the 'body' key is used.")
     private String bodyField;
 
     @Name(Properties.KinesisRealtimeSink.ACCESS_ID)
-    @Description("accessID")
+    @Description("AWS access Id having access to Kinesis streams")
     private String awsAccessKey;
 
     @Name(Properties.KinesisRealtimeSink.ACCESS_KEY)
-    @Description("accessKey")
+    @Description("AWS access key secret having access to Kinesis streams")
     private String awsAccessSecret;
 
+    @Name(Properties.KinesisRealtimeSink.SHARD_COUNT)
+    @Description("Number of shards to be created, each shard has input of 1mb/s")
+    private int shardCount;
+
     @Name(Properties.KinesisRealtimeSink.PARTITION_KEY)
-    @Description("partitionKey")
+    @Description("Partition key to identify shard")
     private String partition;
 
 
-    KinesisConfig(String name, String bodyField, String awsAccessKey, String awsAccessSecret, String partition) {
+    KinesisConfig(String name, String bodyField, String awsAccessKey,
+                  String awsAccessSecret,  String partition, int shardCount) {
       this.name = name;
       this.bodyField = bodyField;
       this.awsAccessKey = awsAccessKey;
       this.awsAccessSecret = awsAccessSecret;
       this.partition = partition;
+      this.shardCount = shardCount;
     }
   }
 }

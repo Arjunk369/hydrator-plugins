@@ -25,7 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Created by Abhinav on 8/18/16.
+ * Utility methods to help create and manage Kinesis Streams
  */
 public class KinesisUtil {
 
@@ -35,8 +35,8 @@ public class KinesisUtil {
    * Creates an Amazon Kinesis stream if it does not exist and waits for it to become available
    *
    * @param kinesisClient The {@link AmazonKinesisClient} with Amazon Kinesis read and write privileges
-   * @param streamName    The Amazon Kinesis stream name to create
-   * @param shardCount    The shard count to create the stream with
+   * @param streamName The Amazon Kinesis stream name to create
+   * @param shardCount The shard count to create the stream with
    * @throws IllegalStateException Invalid Amazon Kinesis stream state
    * @throws IllegalStateException Stream does not go active before the timeout
    */
@@ -47,28 +47,27 @@ public class KinesisUtil {
       String state = streamState(kinesisClient, streamName);
       switch (state) {
         case "DELETING":
-          long startTime = System.currentTimeMillis();
-          long endTime = startTime + 1000 * 120;
-          while (System.currentTimeMillis() < endTime && streamExists(kinesisClient, streamName)) {
+          long waitTime = System.currentTimeMillis() + 1000 * 120;
+          while (System.currentTimeMillis() < waitTime && streamExists(kinesisClient, streamName)) {
             try {
-              LOG.info("...Deleting Stream " + streamName + "...");
+              LOG.info("...Deleting Stream {} ...", streamName);
               Thread.sleep(1000 * 10);
             } catch (InterruptedException e) {
             }
           }
           if (streamExists(kinesisClient, streamName)) {
-            LOG.error("KinesisUtils timed out waiting for stream " + streamName + " to delete");
-            throw new IllegalStateException("KinesisUtils timed out waiting for stream " + streamName
-                                              + " to delete");
+            LOG.error("KinesisUtils timed out waiting for stream {} to delete", streamName);
+            throw new IllegalStateException(String.format("KinesisUtils timed out waiting for stream {} to delete",
+                                                          streamName));
           }
           break;
         case "ACTIVE":
-          LOG.info("Stream " + streamName + " is ACTIVE");
+          LOG.info("Stream {} is ACTIVE", streamName);
           return;
         case "CREATING":
           break;
         case "UPDATING":
-          LOG.info("Stream " + streamName + " is UPDATING");
+          LOG.info("Stream {} is UPDATING", streamName);
           return;
         default:
           throw new IllegalStateException("Illegal stream state: " + state);
@@ -78,23 +77,23 @@ public class KinesisUtil {
       createStreamRequest.setStreamName(streamName);
       createStreamRequest.setShardCount(shardCount);
       kinesisClient.createStream(createStreamRequest);
-      LOG.info("Stream " + streamName + " created");
+      LOG.info("Stream {} created", streamName);
     }
-    long startTime = System.currentTimeMillis();
-    long endTime = startTime + (10 * 60 * 1000);
-    while (System.currentTimeMillis() < endTime) {
+    long waitTime = System.currentTimeMillis() + (10 * 60 * 1000);
+    while (System.currentTimeMillis() < waitTime) {
       try {
         Thread.sleep(1000 * 10);
-      } catch (Exception e) {
+      } catch (InterruptedException e) {
+        LOG.info("Waiting {} milli seconds for the stream to be created", waitTime - System.currentTimeMillis());
       }
       try {
         String streamStatus = streamState(kinesisClient, streamName);
         if (streamStatus.equals("ACTIVE")) {
-          LOG.info("Stream " + streamName + " is ACTIVE");
+          LOG.info("Stream {} is ACTIVE", streamName);
           return;
         }
       } catch (ResourceNotFoundException e) {
-        throw new IllegalStateException("Stream " + streamName + " never went active");
+        throw new IllegalStateException(String.format("Stream {} never went active", streamName), e);
       }
     }
   }
@@ -103,7 +102,7 @@ public class KinesisUtil {
    * Return the state of a Amazon Kinesis stream.
    *
    * @param kinesisClient The {@link AmazonKinesisClient} with Amazon Kinesis read privileges
-   * @param streamName    The Amazon Kinesis stream to get the state of
+   * @param streamName The Amazon Kinesis stream to get the state of
    * @return String representation of the Stream state
    */
   private static String streamState(AmazonKinesisClient kinesisClient, String streamName) {
@@ -120,7 +119,7 @@ public class KinesisUtil {
    * Helper method to determine if an Amazon Kinesis stream exists.
    *
    * @param kinesisClient The {@link AmazonKinesisClient} with Amazon Kinesis read privileges
-   * @param streamName    The Amazon Kinesis stream to check for
+   * @param streamName The Amazon Kinesis stream to check for
    * @return true if the Amazon Kinesis stream exists, otherwise return false
    */
   private static boolean streamExists(AmazonKinesisClient kinesisClient, String streamName) {
@@ -133,6 +132,5 @@ public class KinesisUtil {
       return false;
     }
   }
-
 
 }
