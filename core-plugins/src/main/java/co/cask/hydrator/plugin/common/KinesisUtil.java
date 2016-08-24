@@ -30,7 +30,9 @@ import org.slf4j.LoggerFactory;
 public class KinesisUtil {
 
   private static final Logger LOG = LoggerFactory.getLogger(KinesisUtil.class);
-
+  private static final long DELETE_TIMEOUT = 1000 * 120;
+  private static final long CREATE_TIMEOUT = 10 * 60 * 1000;
+  private static final long SLEEP_INTERVAL = 1000 * 10;
   /**
    * Creates an Amazon Kinesis stream if it does not exist and waits for it to become available
    *
@@ -47,16 +49,15 @@ public class KinesisUtil {
       String state = streamState(kinesisClient, streamName);
       switch (state) {
         case "DELETING":
-          long waitTime = System.currentTimeMillis() + 1000 * 120;
-          while (System.currentTimeMillis() < waitTime && streamExists(kinesisClient, streamName)) {
+          long waitTimeDelete = System.currentTimeMillis() + DELETE_TIMEOUT;
+          while (System.currentTimeMillis() < waitTimeDelete && streamExists(kinesisClient, streamName)) {
             try {
               LOG.info("...Deleting Stream {} ...", streamName);
-              Thread.sleep(1000 * 10);
+              Thread.sleep(SLEEP_INTERVAL);
             } catch (InterruptedException e) {
             }
           }
           if (streamExists(kinesisClient, streamName)) {
-            LOG.error("KinesisUtils timed out waiting for stream {} to delete", streamName);
             throw new IllegalStateException(String.format("KinesisUtils timed out waiting for stream {} to delete",
                                                           streamName));
           }
@@ -65,6 +66,7 @@ public class KinesisUtil {
           LOG.info("Stream {} is ACTIVE", streamName);
           return;
         case "CREATING":
+          LOG.info("Stream {} is being created", streamName);
           break;
         case "UPDATING":
           LOG.info("Stream {} is UPDATING", streamName);
@@ -79,12 +81,11 @@ public class KinesisUtil {
       kinesisClient.createStream(createStreamRequest);
       LOG.info("Stream {} created", streamName);
     }
-    long waitTime = System.currentTimeMillis() + (10 * 60 * 1000);
-    while (System.currentTimeMillis() < waitTime) {
+    long waitTimeCreate = System.currentTimeMillis() + CREATE_TIMEOUT;
+    while (System.currentTimeMillis() < waitTimeCreate) {
       try {
-        Thread.sleep(1000 * 10);
+        Thread.sleep(SLEEP_INTERVAL);
       } catch (InterruptedException e) {
-        LOG.info("Waiting {} milli seconds for the stream to be created", waitTime - System.currentTimeMillis());
       }
       try {
         String streamStatus = streamState(kinesisClient, streamName);
@@ -93,7 +94,8 @@ public class KinesisUtil {
           return;
         }
       } catch (ResourceNotFoundException e) {
-        throw new IllegalStateException(String.format("Stream {} never went active", streamName), e);
+        throw new IllegalStateException(String.format("Stream %s did not go active in %d",
+                                                      streamName, CREATE_TIMEOUT), e);
       }
     }
   }
@@ -111,7 +113,8 @@ public class KinesisUtil {
     try {
       return kinesisClient.describeStream(describeStreamRequest).getStreamDescription().getStreamStatus();
     } catch (AmazonServiceException e) {
-      return null;
+      LOG.debug("State of the stream {} could not be found", streamName);
+      return "";
     }
   }
 
@@ -132,5 +135,4 @@ public class KinesisUtil {
       return false;
     }
   }
-
 }

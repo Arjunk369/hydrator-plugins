@@ -13,6 +13,11 @@
         },
         {
           "widget-type": "textbox",
+          "label": "Input field to Store",
+          "name": "body.field"
+        },
+        {
+          "widget-type": "textbox",
           "label": "Access ID",
           "name": "accessID"
         },
@@ -20,6 +25,11 @@
           "widget-type": "textbox",
           "label": "Access Key",
           "name": "accessKey"
+        },
+        {
+          "widget-type": "textbox",
+          "label": "Shard count",
+          "name": "shardCount"
         },
         {
           "widget-type": "textbox",
@@ -35,7 +45,8 @@
       "widget-type": "schema",
       "widget-attributes": {
         "schema-types": [
-          "string"
+          "string",
+          "bytes"
         ],
         "schema-default-type": "string"
       }
